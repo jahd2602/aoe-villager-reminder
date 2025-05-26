@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AoE Villager Reminder</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    <style>
+        body { margin: 0; font-family: 'Roboto', sans-serif; background-color: #f4f6f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 16px;}
+        .upload-button-label {
+            margin-left: 8px;
+        }
+        .recording-indicator {
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 8px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        /* Ensure MUI components have proper box-sizing */
+        .MuiBox-root, .MuiPaper-root, .MuiButtonBase-root, .MuiInputBase-root, .MuiSlider-root {
+            box-sizing: border-box;
+        }
+
+        /* Animation for the flashy notification */
+        @keyframes pulseNotification {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; box-shadow: 0 0 20px 10px rgba(255, 0, 0, 0.7); }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.9; box-shadow: 0 0 30px 15px rgba(255, 165, 0, 0.8); } /* Orange glow */
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; box-shadow: 0 0 20px 10px rgba(255, 0, 0, 0.7); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@mui/material@5.15.15/umd/material-ui.development.js"></script>
+
+    <script type="text/babel">
+        const {
+            Container,
+            Box,
+            Typography,
+            TextField,
+            Button,
+            Slider,
+            Paper,
+            Chip,
+            IconButton,
+            Stack,
+            Alert 
+        } = MaterialUI;
+
+        // Default audio file path
+        const DEFAULT_VOICE_FILE = 'default_voice.mp3';
+
+        const App = () => {
+            // --- State Variables ---
+            const [duration, setDuration] = React.useState(25);
+            const [currentTime, setCurrentTime] = React.useState(0);
+            const [isRunning, setIsRunning] = React.useState(false);
+            
+            // Updated initial audio source to the default MP3 file
+            const [audioSrc, setAudioSrc] = React.useState(DEFAULT_VOICE_FILE); 
+            const [currentSoundName, setCurrentSoundName] = React.useState('Default Voice');
+            
+            const [isRecording, setIsRecording] = React.useState(false);
+            const mediaRecorderRef = React.useRef(null);
+            const audioChunksRef = React.useRef([]);
+
+            const audioPlayerRef = React.useRef(null); // Ref for the <audio> element
+            const timerIntervalRef = React.useRef(null); // Ref for the setInterval ID
+
+            const [error, setError] = React.useState(null);
+            const [showNotification, setShowNotification] = React.useState(false);
+
+            // --- Timer Logic ---
+            React.useEffect(() => {
+                if (isRunning) {
+                    timerIntervalRef.current = setInterval(() => {
+                        setCurrentTime(prevTime => {
+                            if (prevTime + 1 >= duration) {
+                                playSound();
+                                setShowNotification(true);
+                                setTimeout(() => setShowNotification(false), 900);
+                                return 0; // Loop
+                            }
+                            return prevTime + 1;
+                        });
+                    }, 1000);
+                } else {
+                    clearInterval(timerIntervalRef.current);
+                }
+                return () => clearInterval(timerIntervalRef.current);
+            }, [isRunning, duration, audioSrc]); // audioSrc dependency is important
+
+            // --- Audio Playback ---
+            const playSound = async () => {
+                setError(null);
+                if (audioSrc && audioPlayerRef.current) {
+                    try {
+                        // If the src is a local file path (like default_voice.mp3) or an object URL
+                        audioPlayerRef.current.src = audioSrc;
+                        audioPlayerRef.current.load(); // Ensure the new source is loaded
+                        await audioPlayerRef.current.play();
+                    } catch (e) {
+                        console.error("Error playing sound:", e);
+                        // setError(`Error playing sound: ${e.message}. Ensure '${DEFAULT_VOICE_FILE}' is present or try uploading/recording.`);
+                        // setIsRunning(false); 
+                    }
+                } else {
+                    setError("No audio source selected or audio player not available.");
+                    // setIsRunning(false);
+                }
+            };
+
+            // --- Event Handlers ---
+            const handleDurationChange = (event) => {
+                const newDuration = parseInt(event.target.value, 10);
+                if (newDuration > 0 && newDuration <= 600) {
+                    setDuration(newDuration);
+                    if (currentTime >= newDuration) {
+                        setCurrentTime(0);
+                    }
+                } else if (newDuration > 600) {
+                    setDuration(600);
+                }
+            };
+
+            const handleStartPause = async () => {
+                // No Tone.start() needed here anymore
+                setIsRunning(!isRunning);
+                setError(null);
+            };
+
+            const handleReset = () => {
+                setIsRunning(false);
+                setCurrentTime(0);
+                setError(null);
+                setShowNotification(false);
+            };
+
+            const handleSliderChange = (event, newValue) => {
+                setCurrentTime(newValue);
+                if (isRunning) { 
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = setInterval(() => {
+                        setCurrentTime(prevTime => {
+                            if (prevTime + 1 >= duration) {
+                                playSound();
+                                setShowNotification(true);
+                                setTimeout(() => setShowNotification(false), 1000);
+                                return 0;
+                            }
+                            return prevTime + 1;
+                        });
+                    }, 1000);
+                }
+            };
+            
+            const handleUseDefaultAudio = () => { // Renamed and simplified
+                setAudioSrc(DEFAULT_VOICE_FILE);
+                setCurrentSoundName('Default Voice');
+                setError(null);
+            };
+
+            const handleFileUpload = (event) => {
+                setError(null);
+                const file = event.target.files[0];
+                if (file) {
+                    if (file.type.startsWith('audio/')) {
+                        const objectURL = URL.createObjectURL(file);
+                        setAudioSrc(objectURL);
+                        setCurrentSoundName(file.name);
+                    } else {
+                        setError("Invalid file type. Please upload an audio file.");
+                        event.target.value = null;
+                    }
+                }
+            };
+
+            const handleStartRecording = async () => {
+                setError(null);
+                // No Tone.start() needed
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorderRef.current = new MediaRecorder(stream);
+                    audioChunksRef.current = [];
+
+                    mediaRecorderRef.current.ondataavailable = (event) => {
+                        audioChunksRef.current.push(event.data);
+                    };
+
+                    mediaRecorderRef.current.onstop = () => {
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        setAudioSrc(audioUrl);
+                        setCurrentSoundName('My Recording');
+                        setIsRecording(false);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    mediaRecorderRef.current.start();
+                    setIsRecording(true);
+                } catch (err) {
+                    console.error("Error accessing microphone:", err);
+                    setError("Could not access microphone. Please ensure permission is granted.");
+                    setIsRecording(false);
+                }
+            };
+
+            const handleStopRecording = () => {
+                if (mediaRecorderRef.current && isRecording) {
+                    mediaRecorderRef.current.stop();
+                }
+            };
+            
+            // --- Render ---
+            return (
+                <Paper elevation={3} sx={{ padding: { xs: 2, sm: 3, md: 4 }, width: '100%', maxWidth: '600px', margin: 'auto', borderRadius: '12px', position: 'relative' }}>
+                    <Container maxWidth="sm">
+                        <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
+                            AoE Villager Reminder
+                        </Typography>
+
+                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                        <Box sx={{ mb: 3 }}>
+                            <TextField
+                                fullWidth
+                                label="Reminder Interval (seconds)"
+                                type="number"
+                                value={duration}
+                                onChange={handleDurationChange}
+                                InputProps={{ inputProps: { min: 1, max: 600 } }}
+                                variant="outlined"
+                            />
+                        </Box>
+
+                        <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 1.5 }}>Select Sound</Typography>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ mb: 2 }}>
+                             <Button 
+                                // Updated variant condition and text
+                                variant={audioSrc === DEFAULT_VOICE_FILE ? "contained" : "outlined"} 
+                                onClick={handleUseDefaultAudio}
+                                fullWidth
+                            >
+                                Use Default Voice
+                            </Button>
+                            <Button 
+                                // Updated variant condition
+                                variant={audioSrc !== DEFAULT_VOICE_FILE && !currentSoundName.includes('Recording') ? "contained" : "outlined"} 
+                                component="label" 
+                                fullWidth
+                            >
+                                Upload Audio
+                                <input type="file" hidden accept="audio/*" onChange={handleFileUpload} />
+                            </Button>
+                            <Button 
+                                variant={currentSoundName.includes('Recording') ? "contained" : "outlined"}
+                                onClick={isRecording ? handleStopRecording : handleStartRecording}
+                                color={isRecording ? "error" : "primary"}
+                                fullWidth
+                            >
+                                {isRecording ? (
+                                    <>
+                                        Stop Recording 
+                                        <span className="recording-indicator"></span>
+                                    </>
+                                ) : "Record Audio"}
+                            </Button>
+                        </Stack>
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3, mt:1 }}>
+                            <Chip label={`Current: ${currentSoundName}`} color="secondary" variant="outlined" />
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, mt:3 }}>
+                            <Slider
+                                value={currentTime}
+                                max={duration}
+                                onChange={handleSliderChange}
+                                aria-labelledby="timer-slider-label"
+                                valueLabelDisplay="auto"
+                                valueLabelFormat={(value) => `${value}s`}
+                                sx={{ flexGrow: 1, mr: { xs: 1, sm: 2} }}
+                            />
+                            <Typography id="timer-slider-label" sx={{ minWidth: {xs: '65px', sm: '75px'}, textAlign: 'right', fontSize: {xs: '0.8rem', sm: '0.9rem'} }}>
+                                {currentTime}s / {duration}s
+                            </Typography>
+                        </Box>
+
+                        <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
+                            <Button 
+                                variant="contained" 
+                                color={isRunning ? "warning" : "primary"}
+                                onClick={handleStartPause}
+                                size="large"
+                                startIcon={isRunning ? <MaterialUI.Icon>pause</MaterialUI.Icon> : <MaterialUI.Icon>play_arrow</MaterialUI.Icon>}
+                            >
+                                {isRunning ? 'Pause' : 'Start'}
+                            </Button>
+                            <Button 
+                                variant="outlined" 
+                                color="secondary"
+                                onClick={handleReset}
+                                size="large"
+                                startIcon={<MaterialUI.Icon>replay</MaterialUI.Icon>}
+                            >
+                                Reset
+                            </Button>
+                        </Stack>
+                        
+                        <audio ref={audioPlayerRef} style={{ display: 'none' }} onError={(e) => {
+                            console.error("Audio element error:", e.target.error);
+                            // More specific error if default voice fails
+                            if (audioPlayerRef.current && audioPlayerRef.current.src.endsWith(DEFAULT_VOICE_FILE)) {
+                                setError(`Failed to load default voice: ${DEFAULT_VOICE_FILE}. Ensure it's in the same folder. You can upload or record an alternative.`);
+                            } else {
+                                setError(`Failed to load or play audio: ${currentSoundName}. Code: ${e.target.error ? e.target.error.code : 'unknown'}`);
+                            }
+                            // Don't automatically switch to a non-existent beep. User must choose another option.
+                            // setAudioSrc(DEFAULT_VOICE_FILE); // Keep trying default or let user change
+                            // setCurrentSoundName('Default Voice (fallback)');
+                            setIsRunning(false);
+                        }} />
+
+                        {showNotification && (
+                            <Box sx={{
+                                position: 'fixed',
+                                top: '50%',
+                                left: '50%',
+                                padding: { xs: '20px', sm: '30px 50px' },
+                                backgroundColor: 'rgba(255, 255, 0, 0.95)',
+                                color: 'red',
+                                fontSize: { xs: '1.8em', sm: '2.5em', md: '3em' },
+                                fontWeight: 'bold',
+                                border: '5px solid red',
+                                borderRadius: '15px',
+                                zIndex: 10000,
+                                textAlign: 'center',
+                                animation: 'pulseNotification 1s ease-in-out',
+                                width: { xs: '90%', sm: 'auto' },
+                                minWidth: '280px',
+                                maxWidth: '90vw',
+                            }}>
+                                Create a villager!
+                            </Box>
+                        )}
+                    </Container>
+                </Paper>
+            );
+        };
+
+        ReactDOM.render(
+            <MaterialUI.ThemeProvider theme={MaterialUI.createTheme()}>
+                <App />
+            </MaterialUI.ThemeProvider>,
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>
