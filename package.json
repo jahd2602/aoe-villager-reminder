@@ -1,0 +1,27 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "Plays a sound every 25 seconds.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e:html": "bash tests/e2e/check-html.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jahd2602/aoe-villager-reminder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jahd2602/aoe-villager-reminder/issues"
+  },
+  "homepage": "https://github.com/jahd2602/aoe-villager-reminder#readme",
+  "devDependencies": {
+    "puppeteer": "^24.9.0"
+  }
+}
