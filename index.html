@@ -61,18 +61,20 @@
             Alert 
         } = MaterialUI;
 
-        // Default audio file path
-        const DEFAULT_VOICE_FILE = 'default_voice.mp3';
+        // Default audio file paths
+        const DEFAULT_VILLAGER_FILE = 'create_a_villager.mp3';
+        const DEFAULT_HOUSED_FILE = 'check_pop_build_houses.mp3';
 
         const App = () => {
             // --- State Variables ---
+            // Villager reminder states
             const [duration, setDuration] = React.useState(14);
             const [currentTime, setCurrentTime] = React.useState(0);
             const [isRunning, setIsRunning] = React.useState(false);
             
             // Updated initial audio source to the default MP3 file
-            const [audioSrc, setAudioSrc] = React.useState(DEFAULT_VOICE_FILE); 
-            const [currentSoundName, setCurrentSoundName] = React.useState('Default Voice');
+            const [audioSrc, setAudioSrc] = React.useState(DEFAULT_VILLAGER_FILE); 
+            const [currentSoundName, setCurrentSoundName] = React.useState('Create a Villager');
             
             const [isRecording, setIsRecording] = React.useState(false);
             const mediaRecorderRef = React.useRef(null);
@@ -81,10 +83,27 @@
             const audioPlayerRef = React.useRef(null); // Ref for the <audio> element
             const timerIntervalRef = React.useRef(null); // Ref for the setInterval ID
 
+            // Housed reminder states
+            const [housedDuration, setHousedDuration] = React.useState(30);
+            const [housedCurrentTime, setHousedCurrentTime] = React.useState(0);
+            const [housedIsRunning, setHousedIsRunning] = React.useState(false);
+            
+            const [housedAudioSrc, setHousedAudioSrc] = React.useState(DEFAULT_HOUSED_FILE);
+            const [housedCurrentSoundName, setHousedCurrentSoundName] = React.useState('Check Pop Build Houses');
+            
+            const [housedIsRecording, setHousedIsRecording] = React.useState(false);
+            const housedMediaRecorderRef = React.useRef(null);
+            const housedAudioChunksRef = React.useRef([]);
+
+            const housedAudioPlayerRef = React.useRef(null);
+            const housedTimerIntervalRef = React.useRef(null);
+
             const [error, setError] = React.useState(null);
             const [showNotification, setShowNotification] = React.useState(false);
+            const [showHousedNotification, setShowHousedNotification] = React.useState(false);
 
             // --- Timer Logic ---
+            // Villager timer
             React.useEffect(() => {
                 if (isRunning) {
                     timerIntervalRef.current = setInterval(() => {
@@ -104,18 +123,38 @@
                 return () => clearInterval(timerIntervalRef.current);
             }, [isRunning, duration, audioSrc]); // audioSrc dependency is important
 
+            // Housed timer
+            React.useEffect(() => {
+                if (housedIsRunning) {
+                    housedTimerIntervalRef.current = setInterval(() => {
+                        setHousedCurrentTime(prevTime => {
+                            if (prevTime + 1 >= housedDuration) {
+                                playHousedSound();
+                                setShowHousedNotification(true);
+                                setTimeout(() => setShowHousedNotification(false), 900);
+                                return 0; // Loop
+                            }
+                            return prevTime + 1;
+                        });
+                    }, 1000);
+                } else {
+                    clearInterval(housedTimerIntervalRef.current);
+                }
+                return () => clearInterval(housedTimerIntervalRef.current);
+            }, [housedIsRunning, housedDuration, housedAudioSrc]);
+
             // --- Audio Playback ---
             const playSound = async () => {
                 setError(null);
                 if (audioSrc && audioPlayerRef.current) {
                     try {
-                        // If the src is a local file path (like default_voice.mp3) or an object URL
+                        // If the src is a local file path (like create_a_villager.mp3) or an object URL
                         audioPlayerRef.current.src = audioSrc;
                         audioPlayerRef.current.load(); // Ensure the new source is loaded
                         await audioPlayerRef.current.play();
                     } catch (e) {
                         console.error("Error playing sound:", e);
-                        // setError(`Error playing sound: ${e.message}. Ensure '${DEFAULT_VOICE_FILE}' is present or try uploading/recording.`);
+                        // setError(`Error playing sound: ${e.message}. Ensure '${DEFAULT_VILLAGER_FILE}' is present or try uploading/recording.`);
                         // setIsRunning(false); 
                     }
                 } else {
@@ -124,7 +163,23 @@
                 }
             };
 
+            const playHousedSound = async () => {
+                setError(null);
+                if (housedAudioSrc && housedAudioPlayerRef.current) {
+                    try {
+                        housedAudioPlayerRef.current.src = housedAudioSrc;
+                        housedAudioPlayerRef.current.load();
+                        await housedAudioPlayerRef.current.play();
+                    } catch (e) {
+                        console.error("Error playing housed sound:", e);
+                    }
+                } else {
+                    setError("No housed audio source selected or audio player not available.");
+                }
+            };
+
             // --- Event Handlers ---
+            // Villager reminder handlers
             const handleDurationChange = (event) => {
                 const newDuration = parseInt(event.target.value, 10);
                 if (newDuration > 0 && newDuration <= 600) {
@@ -169,8 +224,8 @@
             };
             
             const handleUseDefaultAudio = () => { // Renamed and simplified
-                setAudioSrc(DEFAULT_VOICE_FILE);
-                setCurrentSoundName('Default Voice');
+                setAudioSrc(DEFAULT_VILLAGER_FILE);
+                setCurrentSoundName('Create a Villager');
                 setError(null);
             };
 
@@ -224,114 +279,340 @@
                     mediaRecorderRef.current.stop();
                 }
             };
+
+            // Housed reminder handlers
+            const handleHousedDurationChange = (event) => {
+                const newDuration = parseInt(event.target.value, 10);
+                if (newDuration > 0 && newDuration <= 600) {
+                    setHousedDuration(newDuration);
+                    if (housedCurrentTime >= newDuration) {
+                        setHousedCurrentTime(0);
+                    }
+                } else if (newDuration > 600) {
+                    setHousedDuration(600);
+                }
+            };
+
+            const handleHousedStartPause = async () => {
+                setHousedIsRunning(!housedIsRunning);
+                setError(null);
+            };
+
+            const handleHousedReset = () => {
+                setHousedIsRunning(false);
+                setHousedCurrentTime(0);
+                setError(null);
+                setShowHousedNotification(false);
+            };
+
+            const handleHousedSliderChange = (event, newValue) => {
+                setHousedCurrentTime(newValue);
+                if (housedIsRunning) { 
+                    clearInterval(housedTimerIntervalRef.current);
+                    housedTimerIntervalRef.current = setInterval(() => {
+                        setHousedCurrentTime(prevTime => {
+                            if (prevTime + 1 >= housedDuration) {
+                                playHousedSound();
+                                setShowHousedNotification(true);
+                                setTimeout(() => setShowHousedNotification(false), 1000);
+                                return 0;
+                            }
+                            return prevTime + 1;
+                        });
+                    }, 1000);
+                }
+            };
+            
+            const handleUseDefaultHousedAudio = () => {
+                setHousedAudioSrc(DEFAULT_HOUSED_FILE);
+                setHousedCurrentSoundName('Check Pop Build Houses');
+                setError(null);
+            };
+
+            const handleHousedFileUpload = (event) => {
+                setError(null);
+                const file = event.target.files[0];
+                if (file) {
+                    if (file.type.startsWith('audio/')) {
+                        const objectURL = URL.createObjectURL(file);
+                        setHousedAudioSrc(objectURL);
+                        setHousedCurrentSoundName(file.name);
+                    } else {
+                        setError("Invalid file type. Please upload an audio file.");
+                        event.target.value = null;
+                    }
+                }
+            };
+
+            const handleHousedStartRecording = async () => {
+                setError(null);
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    housedMediaRecorderRef.current = new MediaRecorder(stream);
+                    housedAudioChunksRef.current = [];
+
+                    housedMediaRecorderRef.current.ondataavailable = (event) => {
+                        housedAudioChunksRef.current.push(event.data);
+                    };
+
+                    housedMediaRecorderRef.current.onstop = () => {
+                        const audioBlob = new Blob(housedAudioChunksRef.current, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        setHousedAudioSrc(audioUrl);
+                        setHousedCurrentSoundName('My Housed Recording');
+                        setHousedIsRecording(false);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    housedMediaRecorderRef.current.start();
+                    setHousedIsRecording(true);
+                } catch (err) {
+                    console.error("Error accessing microphone:", err);
+                    setError("Could not access microphone. Please ensure permission is granted.");
+                    setHousedIsRecording(false);
+                }
+            };
+
+            const handleHousedStopRecording = () => {
+                if (housedMediaRecorderRef.current && housedIsRecording) {
+                    housedMediaRecorderRef.current.stop();
+                }
+            };
+
+            // Combined controls handler
+            const handleStartBoth = () => {
+                setIsRunning(true);
+                setHousedIsRunning(true);
+                setError(null);
+            };
             
             // --- Render ---
             return (
-                <Paper elevation={3} sx={{ padding: { xs: 2, sm: 3, md: 4 }, width: '100%', maxWidth: '600px', margin: 'auto', borderRadius: '12px', position: 'relative' }}>
-                    <Container maxWidth="sm">
-                        <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
-                            AoE Villager Reminder
+                <Paper elevation={3} sx={{ padding: { xs: 2, sm: 3, md: 4 }, width: '100%', maxWidth: '800px', margin: 'auto', borderRadius: '12px', position: 'relative' }}>
+                    <Container maxWidth="md">
+                        <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 4 }}>
+                            AoE Reminder App
                         </Typography>
+
+                        {/* Start Both Button */}
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+                            <Button 
+                                variant="contained" 
+                                size="large"
+                                onClick={handleStartBoth}
+                                sx={{ 
+                                    fontSize: '1.2rem', 
+                                    padding: '12px 48px', 
+                                    backgroundColor: 'success.main',
+                                    '&:hover': { backgroundColor: 'success.dark' }
+                                }}
+                                startIcon={<MaterialUI.Icon>play_circle_filled</MaterialUI.Icon>}
+                            >
+                                Start Both Reminders
+                            </Button>
+                        </Box>
 
                         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-                        <Box sx={{ mb: 3 }}>
-                            <TextField
-                                fullWidth
-                                label="Reminder Interval (seconds)"
-                                type="number"
-                                value={duration}
-                                onChange={handleDurationChange}
-                                InputProps={{ inputProps: { min: 1, max: 600 } }}
-                                variant="outlined"
-                            />
-                        </Box>
-
-                        <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 1.5 }}>Select Sound</Typography>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ mb: 2 }}>
-                             <Button 
-                                // Updated variant condition and text
-                                variant={audioSrc === DEFAULT_VOICE_FILE ? "contained" : "outlined"} 
-                                onClick={handleUseDefaultAudio}
-                                fullWidth
-                            >
-                                Use Default Voice
-                            </Button>
-                            <Button 
-                                // Updated variant condition
-                                variant={audioSrc !== DEFAULT_VOICE_FILE && !currentSoundName.includes('Recording') ? "contained" : "outlined"} 
-                                component="label" 
-                                fullWidth
-                            >
-                                Upload Audio
-                                <input type="file" hidden accept="audio/*" onChange={handleFileUpload} />
-                            </Button>
-                            <Button 
-                                variant={currentSoundName.includes('Recording') ? "contained" : "outlined"}
-                                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                                color={isRecording ? "error" : "primary"}
-                                fullWidth
-                            >
-                                {isRecording ? (
-                                    <>
-                                        Stop Recording 
-                                        <span className="recording-indicator"></span>
-                                    </>
-                                ) : "Record Audio"}
-                            </Button>
-                        </Stack>
-                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3, mt:1 }}>
-                            <Chip label={`Current: ${currentSoundName}`} color="secondary" variant="outlined" />
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, mt:3 }}>
-                            <Slider
-                                value={currentTime}
-                                max={duration}
-                                onChange={handleSliderChange}
-                                aria-labelledby="timer-slider-label"
-                                valueLabelDisplay="auto"
-                                valueLabelFormat={(value) => `${value}s`}
-                                sx={{ flexGrow: 1, mr: { xs: 1, sm: 2} }}
-                            />
-                            <Typography id="timer-slider-label" sx={{ minWidth: {xs: '65px', sm: '75px'}, textAlign: 'right', fontSize: {xs: '0.8rem', sm: '0.9rem'} }}>
-                                {currentTime}s / {duration}s
+                        {/* Villager Reminder Section */}
+                        <Paper elevation={2} sx={{ p: 3, mb: 4, backgroundColor: '#f8f9fa' }}>
+                            <Typography variant="h5" component="h2" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
+                                Villager Reminder
                             </Typography>
-                        </Box>
 
-                        <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
-                            <Button 
-                                variant="contained" 
-                                color={isRunning ? "warning" : "primary"}
-                                onClick={handleStartPause}
-                                size="large"
-                                startIcon={isRunning ? <MaterialUI.Icon>pause</MaterialUI.Icon> : <MaterialUI.Icon>play_arrow</MaterialUI.Icon>}
-                            >
-                                {isRunning ? 'Pause' : 'Start'}
-                            </Button>
-                            <Button 
-                                variant="outlined" 
-                                color="secondary"
-                                onClick={handleReset}
-                                size="large"
-                                startIcon={<MaterialUI.Icon>replay</MaterialUI.Icon>}
-                            >
-                                Reset
-                            </Button>
-                        </Stack>
+                            <Box sx={{ mb: 3 }}>
+                                <TextField
+                                    fullWidth
+                                    label="Reminder Interval (seconds)"
+                                    type="number"
+                                    value={duration}
+                                    onChange={handleDurationChange}
+                                    InputProps={{ inputProps: { min: 1, max: 600 } }}
+                                    variant="outlined"
+                                />
+                            </Box>
+
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ mb: 2 }}>
+                                 <Button 
+                                    // Updated variant condition and text
+                                    variant={audioSrc === DEFAULT_VILLAGER_FILE ? "contained" : "outlined"} 
+                                    onClick={handleUseDefaultAudio}
+                                    fullWidth
+                                >
+                                    Use Default Voice
+                                </Button>
+                                <Button 
+                                    // Updated variant condition
+                                    variant={audioSrc !== DEFAULT_VILLAGER_FILE && !currentSoundName.includes('Recording') ? "contained" : "outlined"} 
+                                    component="label" 
+                                    fullWidth
+                                >
+                                    Upload Audio
+                                    <input type="file" hidden accept="audio/*" onChange={handleFileUpload} />
+                                </Button>
+                                <Button 
+                                    variant={currentSoundName.includes('Recording') ? "contained" : "outlined"}
+                                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                                    color={isRecording ? "error" : "primary"}
+                                    fullWidth
+                                >
+                                    {isRecording ? (
+                                        <>
+                                            Stop Recording 
+                                            <span className="recording-indicator"></span>
+                                        </>
+                                    ) : "Record Audio"}
+                                </Button>
+                            </Stack>
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3, mt:1 }}>
+                                <Chip label={`Current: ${currentSoundName}`} color="secondary" variant="outlined" />
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, mt:3 }}>
+                                <Slider
+                                    value={currentTime}
+                                    max={duration}
+                                    onChange={handleSliderChange}
+                                    aria-labelledby="timer-slider-label"
+                                    valueLabelDisplay="auto"
+                                    valueLabelFormat={(value) => `${value}s`}
+                                    sx={{ flexGrow: 1, mr: { xs: 1, sm: 2} }}
+                                />
+                                <Typography id="timer-slider-label" sx={{ minWidth: {xs: '65px', sm: '75px'}, textAlign: 'right', fontSize: {xs: '0.8rem', sm: '0.9rem'} }}>
+                                    {currentTime}s / {duration}s
+                                </Typography>
+                            </Box>
+
+                            <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
+                                <Button 
+                                    variant="contained" 
+                                    color={isRunning ? "warning" : "primary"}
+                                    onClick={handleStartPause}
+                                    size="large"
+                                    startIcon={isRunning ? <MaterialUI.Icon>pause</MaterialUI.Icon> : <MaterialUI.Icon>play_arrow</MaterialUI.Icon>}
+                                >
+                                    {isRunning ? 'Pause' : 'Start'}
+                                </Button>
+                                <Button 
+                                    variant="outlined" 
+                                    color="secondary"
+                                    onClick={handleReset}
+                                    size="large"
+                                    startIcon={<MaterialUI.Icon>replay</MaterialUI.Icon>}
+                                >
+                                    Reset
+                                </Button>
+                            </Stack>
+                        </Paper>
+
+                        {/* Housed Reminder Section */}
+                        <Paper elevation={2} sx={{ p: 3, mb: 4, backgroundColor: '#f8f9fa' }}>
+                            <Typography variant="h5" component="h2" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
+                                Housed Reminder
+                            </Typography>
+
+                            <Box sx={{ mb: 3 }}>
+                                <TextField
+                                    fullWidth
+                                    label="Reminder Interval (seconds)"
+                                    type="number"
+                                    value={housedDuration}
+                                    onChange={handleHousedDurationChange}
+                                    InputProps={{ inputProps: { min: 1, max: 600 } }}
+                                    variant="outlined"
+                                />
+                            </Box>
+
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ mb: 2 }}>
+                                 <Button 
+                                    variant={housedAudioSrc === DEFAULT_HOUSED_FILE ? "contained" : "outlined"} 
+                                    onClick={handleUseDefaultHousedAudio}
+                                    fullWidth
+                                >
+                                    Use Default Voice
+                                </Button>
+                                <Button 
+                                    variant={housedAudioSrc !== DEFAULT_HOUSED_FILE && !housedCurrentSoundName.includes('Recording') ? "contained" : "outlined"} 
+                                    component="label" 
+                                    fullWidth
+                                >
+                                    Upload Audio
+                                    <input type="file" hidden accept="audio/*" onChange={handleHousedFileUpload} />
+                                </Button>
+                                <Button 
+                                    variant={housedCurrentSoundName.includes('Recording') ? "contained" : "outlined"}
+                                    onClick={housedIsRecording ? handleHousedStopRecording : handleHousedStartRecording}
+                                    color={housedIsRecording ? "error" : "primary"}
+                                    fullWidth
+                                >
+                                    {housedIsRecording ? (
+                                        <>
+                                            Stop Recording 
+                                            <span className="recording-indicator"></span>
+                                        </>
+                                    ) : "Record Audio"}
+                                </Button>
+                            </Stack>
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3, mt:1 }}>
+                                <Chip label={`Current: ${housedCurrentSoundName}`} color="secondary" variant="outlined" />
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, mt:3 }}>
+                                <Slider
+                                    value={housedCurrentTime}
+                                    max={housedDuration}
+                                    onChange={handleHousedSliderChange}
+                                    aria-labelledby="housed-timer-slider-label"
+                                    valueLabelDisplay="auto"
+                                    valueLabelFormat={(value) => `${value}s`}
+                                    sx={{ flexGrow: 1, mr: { xs: 1, sm: 2} }}
+                                />
+                                <Typography id="housed-timer-slider-label" sx={{ minWidth: {xs: '65px', sm: '75px'}, textAlign: 'right', fontSize: {xs: '0.8rem', sm: '0.9rem'} }}>
+                                    {housedCurrentTime}s / {housedDuration}s
+                                </Typography>
+                            </Box>
+
+                            <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
+                                <Button 
+                                    variant="contained" 
+                                    color={housedIsRunning ? "warning" : "primary"}
+                                    onClick={handleHousedStartPause}
+                                    size="large"
+                                    startIcon={housedIsRunning ? <MaterialUI.Icon>pause</MaterialUI.Icon> : <MaterialUI.Icon>play_arrow</MaterialUI.Icon>}
+                                >
+                                    {housedIsRunning ? 'Pause' : 'Start'}
+                                </Button>
+                                <Button 
+                                    variant="outlined" 
+                                    color="secondary"
+                                    onClick={handleHousedReset}
+                                    size="large"
+                                    startIcon={<MaterialUI.Icon>replay</MaterialUI.Icon>}
+                                >
+                                    Reset
+                                </Button>
+                            </Stack>
+                        </Paper>
                         
                         <audio ref={audioPlayerRef} style={{ display: 'none' }} onError={(e) => {
                             console.error("Audio element error:", e.target.error);
                             // More specific error if default voice fails
-                            if (audioPlayerRef.current && audioPlayerRef.current.src.endsWith(DEFAULT_VOICE_FILE)) {
-                                setError(`Failed to load default voice: ${DEFAULT_VOICE_FILE}. Ensure it's in the same folder. You can upload or record an alternative.`);
+                            if (audioPlayerRef.current && audioPlayerRef.current.src.endsWith(DEFAULT_VILLAGER_FILE)) {
+                                setError(`Failed to load default voice: ${DEFAULT_VILLAGER_FILE}. Ensure it's in the same folder. You can upload or record an alternative.`);
                             } else {
                                 setError(`Failed to load or play audio: ${currentSoundName}. Code: ${e.target.error ? e.target.error.code : 'unknown'}`);
                             }
-                            // Don't automatically switch to a non-existent beep. User must choose another option.
-                            // setAudioSrc(DEFAULT_VOICE_FILE); // Keep trying default or let user change
-                            // setCurrentSoundName('Default Voice (fallback)');
                             setIsRunning(false);
+                        }} />
+
+                        <audio ref={housedAudioPlayerRef} style={{ display: 'none' }} onError={(e) => {
+                            console.error("Housed audio element error:", e.target.error);
+                            if (housedAudioPlayerRef.current && housedAudioPlayerRef.current.src.endsWith(DEFAULT_HOUSED_FILE)) {
+                                setError(`Failed to load default housed voice: ${DEFAULT_HOUSED_FILE}. Ensure it's in the same folder. You can upload or record an alternative.`);
+                            } else {
+                                setError(`Failed to load or play housed audio: ${housedCurrentSoundName}. Code: ${e.target.error ? e.target.error.code : 'unknown'}`);
+                            }
+                            setHousedIsRunning(false);
                         }} />
 
                         {showNotification && (
@@ -354,6 +635,29 @@
                                 maxWidth: '90vw',
                             }}>
                                 Create a villager!
+                            </Box>
+                        )}
+
+                        {showHousedNotification && (
+                            <Box sx={{
+                                position: 'fixed',
+                                top: '50%',
+                                left: '50%',
+                                padding: { xs: '20px', sm: '30px 50px' },
+                                backgroundColor: 'rgba(255, 165, 0, 0.95)',
+                                color: 'darkred',
+                                fontSize: { xs: '1.8em', sm: '2.5em', md: '3em' },
+                                fontWeight: 'bold',
+                                border: '5px solid darkred',
+                                borderRadius: '15px',
+                                zIndex: 10000,
+                                textAlign: 'center',
+                                animation: 'pulseNotification 1s ease-in-out',
+                                width: { xs: '90%', sm: 'auto' },
+                                minWidth: '280px',
+                                maxWidth: '90vw',
+                            }}>
+                                Check population!
                             </Box>
                         )}
                     </Container>
